@@ -21,6 +21,9 @@ import {
 } from "@/lib/source-lifecycle"
 import { isPathAllowedBySourceWatch, normalizeSourceWatchConfig } from "@/lib/source-watch-config"
 import { refreshProjectFileTree } from "@/lib/project-file-tree-refresh"
+import { listDirectory } from "@/commands/fs"
+import { normalizeWikiRefKey } from "@/lib/wiki-cleanup"
+import type { FileNode } from "@/types/wiki"
 
 let unlistenQueue: UnlistenFn | null = null
 let unlistenChanged: UnlistenFn | null = null
@@ -306,11 +309,64 @@ async function cleanupDeletedFiles(project: WikiProject, tasks: FileChangeTask[]
   const wikiPagesToClean = wikiPages.filter((path) => !deletedWikiSlugs.has(getFileStem(path)))
   if (wikiPagesToClean.length > 0) {
     try {
-      await cleanupDeletedWikiPages(project.path, wikiPagesToClean)
+      // Move guard: a "deleted" wiki page whose page-name still exists
+      // somewhere in the current wiki tree was MOVED (e.g. bulk `git mv`
+      // reorganisation), not deleted. Wikilinks resolve by page-name, so
+      // every [[ref]] to it is still valid — running the deletion cascade
+      // would strip thousands of legitimate links and truncate related:
+      // frontmatter across the whole wiki (observed in the wild: v0.6.11
+      // mass-stripped ~14.5k wikilinks after a directory migration).
+      const survivingKeys = await collectSurvivingWikiPageKeys(project.path)
+      if (survivingKeys === null) {
+        // Tree listing failed: refuse to guess. Skipping the cascade is
+        // always safe (stale refs are cosmetic); stripping live refs is not.
+        console.warn(
+          `[file-sync] wiki tree listing failed; skipping deletion cascade for ${wikiPagesToClean.length} page(s)`,
+        )
+      } else {
+        const toClean = wikiPagesToClean.filter(
+          (path) => !survivingKeys.has(normalizeWikiRefKey(getFileStem(path))),
+        )
+        const movedCount = wikiPagesToClean.length - toClean.length
+        if (movedCount > 0) {
+          console.log(
+            `[file-sync] treating ${movedCount} deleted wiki page path(s) as moves (stem still present); skipping cascade for them`,
+          )
+        }
+        if (toClean.length > 0) {
+          await cleanupDeletedWikiPages(project.path, toClean)
+        }
+      }
     } catch (err) {
       console.error("[file-sync] failed to clean deleted wiki pages:", err)
     }
   }
+}
+
+/**
+ * Page-name keys (normalizeWikiRefKey form) of every .md page currently in
+ * the wiki tree. Returns null when the tree cannot be listed.
+ */
+async function collectSurvivingWikiPageKeys(projectPath: string): Promise<Set<string> | null> {
+  const pp = normalizePath(projectPath)
+  let tree: FileNode[]
+  try {
+    tree = await listDirectory(`${pp}/wiki`)
+  } catch {
+    return null
+  }
+  const keys = new Set<string>()
+  const walk = (nodes: FileNode[]) => {
+    for (const node of nodes) {
+      if (node.is_dir) {
+        if (node.children) walk(node.children)
+      } else if (node.name.toLowerCase().endsWith(".md")) {
+        keys.add(normalizeWikiRefKey(getFileStem(node.name)))
+      }
+    }
+  }
+  walk(tree)
+  return keys
 }
 
 function isRawSourcePathForCascade(relativePath: string): boolean {

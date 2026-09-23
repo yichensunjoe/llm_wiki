@@ -777,6 +777,159 @@ describe("project file sync", () => {
     })
   })
 
+  it("treats a deleted wiki path whose page-name still exists as a move (no ref stripping)", async () => {
+    vi.useFakeTimers()
+    const { startProjectFileSync } = await import("@/lib/project-file-sync")
+    const { useWikiStore } = await import("@/stores/wiki-store")
+
+    const project = { id: "A", name: "A", path: "/tmp/a" }
+    useWikiStore.getState().setProject(project)
+    // Directory reorganisation: the page moved from wiki/concepts/mind.md
+    // to wiki/01-文献/concepts/mind.md (same page-name → wikilinks still valid).
+    mocks.listDirectory.mockImplementation(async (path?: string) => {
+      if (path === "/tmp/a/wiki") {
+        return [
+          {
+            name: "01-文献",
+            path: "/tmp/a/wiki/01-文献",
+            is_dir: true,
+            children: [
+              {
+                name: "concepts",
+                path: "/tmp/a/wiki/01-文献/concepts",
+                is_dir: true,
+                children: [
+                  {
+                    name: "mind.md",
+                    path: "/tmp/a/wiki/01-文献/concepts/mind.md",
+                    is_dir: false,
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: "concepts",
+            path: "/tmp/a/wiki/concepts",
+            is_dir: true,
+            children: [
+              {
+                name: "other.md",
+                path: "/tmp/a/wiki/concepts/other.md",
+                is_dir: false,
+              },
+            ],
+          },
+        ]
+      }
+      return []
+    })
+    mocks.readFile.mockImplementation(async (path?: string) => {
+      if (path === "/tmp/a/wiki/concepts/other.md") {
+        return '---\nrelated: ["mind"]\n---\n\nsee [[mind]] here\n'
+      }
+      if (path === "/tmp/a/wiki/log.md") return "# Wiki Log\n"
+      return ""
+    })
+
+    void startProjectFileSync(project)
+    await vi.waitFor(() => {
+      expect(mocks.listen).toHaveBeenCalledTimes(2)
+    })
+
+    mocks.emit("file-sync://changed", {
+      projectId: "A",
+      tasks: [
+        {
+          id: "t1",
+          projectId: "A",
+          path: "wiki/concepts/mind.md",
+          kind: "deleted",
+          status: "done",
+          createdAt: 1,
+          updatedAt: 1,
+          retryCount: 0,
+          needsRerun: false,
+        },
+      ],
+    })
+
+    await vi.advanceTimersByTimeAsync(250)
+    // Guard must recognise the move and skip the deletion cascade entirely —
+    // no page may be rewritten, and [[mind]] links must stay intact.
+    expect(mocks.writeFile).not.toHaveBeenCalled()
+  })
+
+  it("still cascades when the deleted page-name no longer exists anywhere", async () => {
+    vi.useFakeTimers()
+    const { startProjectFileSync } = await import("@/lib/project-file-sync")
+    const { useWikiStore } = await import("@/stores/wiki-store")
+
+    const project = { id: "A", name: "A", path: "/tmp/a" }
+    useWikiStore.getState().setProject(project)
+    mocks.listDirectory.mockImplementation(async (path?: string) => {
+      if (path === "/tmp/a/wiki") {
+        return [
+          {
+            name: "concepts",
+            path: "/tmp/a/wiki/concepts",
+            is_dir: true,
+            children: [
+              {
+                name: "other.md",
+                path: "/tmp/a/wiki/concepts/other.md",
+                is_dir: false,
+              },
+            ],
+          },
+        ]
+      }
+      return []
+    })
+    mocks.readFile.mockImplementation(async (path?: string) => {
+      if (path === "/tmp/a/wiki/concepts/other.md") {
+        return '---\nrelated: ["ghost", "kept"]\n---\n\nsee [[ghost]] and [[kept]]\n'
+      }
+      if (path === "/tmp/a/wiki/log.md") return "# Wiki Log\n"
+      return ""
+    })
+
+    void startProjectFileSync(project)
+    await vi.waitFor(() => {
+      expect(mocks.listen).toHaveBeenCalledTimes(2)
+    })
+
+    mocks.emit("file-sync://changed", {
+      projectId: "A",
+      tasks: [
+        {
+          id: "t1",
+          projectId: "A",
+          path: "wiki/concepts/ghost.md",
+          kind: "deleted",
+          status: "done",
+          createdAt: 1,
+          updatedAt: 1,
+          retryCount: 0,
+          needsRerun: false,
+        },
+      ],
+    })
+
+    await vi.advanceTimersByTimeAsync(250)
+
+    await vi.waitFor(() => {
+      expect(mocks.writeFile).toHaveBeenCalledWith(
+        "/tmp/a/wiki/concepts/other.md",
+        expect.stringContaining('related: ["kept"]'),
+      )
+    })
+    expect(mocks.writeFile).toHaveBeenCalledWith(
+      "/tmp/a/wiki/concepts/other.md",
+      expect.stringContaining("see ghost and [[kept]]"),
+    )
+  })
+
   it("processes external batch source deletion with one wiki scan and one cascade", async () => {
     vi.useFakeTimers()
     const { startProjectFileSync } = await import("@/lib/project-file-sync")
