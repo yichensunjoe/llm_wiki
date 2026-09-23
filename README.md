@@ -40,9 +40,9 @@ npm run tauri build  # 打包桌面应用
 
 ## Notes（已知限制）
 
-- `main` 跟踪 `origin/main`；本地修改开独立分支，禁止直推上游。
-- 上游 `.gitignore` 忽略 `AGENTS.md` 与 `docs/`，本项目以 `-f` 强制跟踪治理文件。
-- 版本与备份：独立本地 Git，上游即远端；治理提交见 `cccacd9`。
+- 远端结构：`origin` = 用户 fork `yichensunjoe/llm_wiki`（推送与 release 目的地），`upstream` = `nashsu/llm_wiki`（只读）。fork 自有版本线，当前 **v0.6.12**（基于上游 0.6.11 + wiki 移动守卫修复，见 `docs/diagnosis-wikilink-strip.md`）。
+- 发布：推 `v*` 标签自动触发 `.github/workflows/build.yml` 全平台构建并生成 GitHub Release；`workflow_dispatch` 仅产 artifacts 不发 Release。
+- 版本与备份：fork 即远端（GitHub）；大型二进制（PDFium 等）已入库由上游管理，无需额外备份。
 
 ---
 

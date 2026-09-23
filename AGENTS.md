@@ -9,10 +9,11 @@
 
 ## 项目级约束
 
-1. `main` 分支跟踪上游 `origin/main`；任何本地修改（诊断补丁、功能开发）开独立分支进行，禁止直接改 `main` 后推上游。
-2. 本目录源码是**上游原始实现**，修改前先确认安装版行为与源码一致（安装版可能含未发布改动）。
-3. 与 MSRE 知识库（`/Users/joe/msre wiki`）联动的问题（双链剥离、侧栏分组、图谱边数）在本项目复现时，结论双写：本项目 `REUSE_AND_PITFALL_LOG.md` 记详细条目，工作区根同名日志同步注明 P083。
-4. 构建/运行需 Node + Rust（Tauri）；仅做源码阅读与静态诊断时无需安装依赖。
+1. **远端结构**：`origin` = 用户 fork（`github.com/yichensunjoe/llm_wiki`，一切推送与 release 的目的地）；`upstream` = 原始仓库（`github.com/nashsu/llm_wiki`，只读同步）。日常修改在 `main` 上进行并推送 fork；与上游同步用 `git fetch upstream && git merge upstream/main`（或 rebase），冲突以我们的改动为准并记录。
+2. **版本线**：fork 自有版本号（当前 v0.6.12），发布打 `v*` 标签触发 `.github/workflows/build.yml` 全平台构建并自动生成 GitHub Release；手动验证构建用 `workflow_dispatch`（不产生 Release，只产 artifacts）。
+3. 本目录源码以 fork 的 `main` 为准；诊断安装版行为前先确认安装版来源（自构建 or 上游发布）。
+4. 与 MSRE 知识库（`/Users/joe/msre wiki`）联动的问题（双链剥离、侧栏分组、图谱边数）在本项目复现时，结论双写：本项目 `REUSE_AND_PITFALL_LOG.md` 记详细条目，工作区根同名日志同步注明 P083。
+5. 构建/运行需 Node + Rust（Tauri）；仅做源码阅读与静态诊断时无需安装依赖。
 
 ## 日志与交接
 
