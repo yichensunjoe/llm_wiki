@@ -48,6 +48,7 @@
     "filterBySource": "Фильтр знаний по источнику",
     "allSources": "Все источники",
     "noWikiPages": "Пока нет страниц вики. Импортируйте источники, чтобы начать.",
+    "categoryLabels": { "root": "Обзор" },
     "typeLabels": {
       "overview": "Обзор", "entity": "Сущности", "concept": "Понятия",
       "source": "Источники", "synthesis": "Синтез", "finding": "Результаты",

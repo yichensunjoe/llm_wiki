@@ -48,6 +48,7 @@
     "filterBySource": "Filter knowledge by source",
     "allSources": "All sources",
     "noWikiPages": "No wiki pages yet. Import sources to get started.",
+    "categoryLabels": { "root": "Overview" },
     "typeLabels": {
       "overview": "Overview", "entity": "Entities", "concept": "Concepts",
       "source": "Sources", "synthesis": "Synthesis", "finding": "Findings",

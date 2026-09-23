@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import {
-  FileText, Users, Lightbulb, BookOpen, HelpCircle, GitMerge, BarChart3, TrendingUp, Target, ChevronRight, ChevronDown, Layout, Globe, Trash2,
+  FileText, Users, Lightbulb, BookOpen, HelpCircle, GitMerge, BarChart3, TrendingUp, Target, ChevronRight, ChevronDown, Layout, Globe, Trash2, Folder,
 } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
@@ -17,6 +17,7 @@ import { useAppDialog } from "@/stores/app-dialog-store"
 import { parseSources } from "@/lib/sources-merge"
 import { filterPagesBySource, listPageSourceIdentities } from "@/lib/knowledge-source-filter"
 import { flattenFilesNaturally } from "@/lib/file-tree-order"
+import { ROOT_CATEGORY_KEY, wikiCategoryOf, groupByCategory } from "@/lib/knowledge-category-group"
 
 interface WikiPageInfo {
   path: string
@@ -55,6 +56,12 @@ export function KnowledgeTree() {
   const [pages, setPages] = useState<WikiPageInfo[]>([])
   const [selectedSource, setSelectedSource] = useState<string | null>(null)
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set(["overview", "entity", "concept", "source"]))
+  // Top-level category folders (六大分类) own one collapsible section each.
+  // Default: expand the synthetic root category plus the first (lowest-order)
+  // real category, so the first-open view shows the overview pages and the
+  // primary content category without dumping every section at once.
+  const [expandedCategories, setExpandedCategories] = useState<Set<string> | null>(null)
+  const categoryDefaultApplied = useRef(false)
   // Two-stage delete: first click arms the row, second click executes.
   // Only one row armed at a time (clicking another row replaces).
   const [armedPath, setArmedPath] = useState<string | null>(null)
@@ -109,6 +116,30 @@ export function KnowledgeTree() {
     [pages, selectedSource],
   )
 
+  const wikiRoot = useMemo(
+    () => (project ? `${normalizePath(project.path)}/wiki` : null),
+    [project],
+  )
+
+  // Group pages by top-level category folder (六大分类), keeping the
+  // per-type grouping inside each category.
+  const categoryGroups = useMemo(() => {
+    if (!wikiRoot) return []
+    return groupByCategory(visiblePages, (p) => wikiCategoryOf(p.path, wikiRoot))
+  }, [visiblePages, wikiRoot])
+
+  // Apply the default category expansion exactly once, after the first
+  // successful page load: root overview pages + the primary (first-order)
+  // content category start expanded; everything else starts collapsed.
+  useEffect(() => {
+    if (categoryDefaultApplied.current || categoryGroups.length === 0) return
+    categoryDefaultApplied.current = true
+    const defaults = new Set<string>([ROOT_CATEGORY_KEY])
+    const firstReal = categoryGroups.find((g) => g.category.key !== ROOT_CATEGORY_KEY)
+    if (firstReal) defaults.add(firstReal.category.key)
+    setExpandedCategories(defaults)
+  }, [categoryGroups])
+
   useEffect(() => {
     if (selectedSource && !sourceOptions.includes(selectedSource)) setSelectedSource(null)
   }, [selectedSource, sourceOptions])
@@ -155,27 +186,36 @@ export function KnowledgeTree() {
     )
   }
 
-  // Group pages by type
-  const grouped = new Map<string, WikiPageInfo[]>()
-  for (const page of visiblePages) {
-    const list = grouped.get(page.type) ?? []
-    list.push(page)
-    grouped.set(page.type, list)
+  // Sort type groups by configured order
+  function typeGroupEntries(items: WikiPageInfo[]): Array<[string, WikiPageInfo[]]> {
+    const grouped = new Map<string, WikiPageInfo[]>()
+    for (const page of items) {
+      const list = grouped.get(page.type) ?? []
+      list.push(page)
+      grouped.set(page.type, list)
+    }
+    return [...grouped.entries()].sort((a, b) => {
+      const orderA = typeConfig(a[0]).order
+      const orderB = typeConfig(b[0]).order
+      if (orderA === orderB) return wikiTypeLabel(a[0]).localeCompare(wikiTypeLabel(b[0]))
+      return orderA - orderB
+    })
   }
-
-  // Sort groups by configured order
-  const sortedGroups = [...grouped.entries()].sort((a, b) => {
-    const orderA = typeConfig(a[0]).order
-    const orderB = typeConfig(b[0]).order
-    if (orderA === orderB) return wikiTypeLabel(a[0]).localeCompare(wikiTypeLabel(b[0]))
-    return orderA - orderB
-  })
 
   function toggleType(type: string) {
     setExpandedTypes((prev) => {
       const next = new Set(prev)
       if (next.has(type)) next.delete(type)
       else next.add(type)
+      return next
+    })
+  }
+
+  function toggleCategory(key: string) {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev ?? [])
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
   }
@@ -206,74 +246,106 @@ export function KnowledgeTree() {
           </div>
         )}
 
-        {sortedGroups.length === 0 && (
+        {categoryGroups.length === 0 && (
           <div className="px-2 py-4 text-center text-xs text-muted-foreground">
             {t("sidebar.noWikiPages")}
           </div>
         )}
 
-        {sortedGroups.map(([type, items]) => {
-          const config = typeConfig(type)
-          const Icon = config.icon
-          const isExpanded = expandedTypes.has(type)
+        {categoryGroups.map(({ category, items }) => {
+          const categoryExpanded = expandedCategories?.has(category.key) ?? false
+          const categoryLabel =
+            category.key === ROOT_CATEGORY_KEY
+              ? t("sidebar.categoryLabels.root", { defaultValue: "Overview" })
+              : t(`sidebar.categoryLabels.${category.key}`, { defaultValue: category.label })
 
           return (
-            <div key={type} className="mb-1">
+            <div key={category.key} className="mb-1">
               <button
-                onClick={() => toggleType(type)}
+                onClick={() => toggleCategory(category.key)}
                 className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-sm hover:bg-accent/50"
               >
-                {isExpanded ? (
+                {categoryExpanded ? (
                   <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 ) : (
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 )}
-                <Icon className={`h-3.5 w-3.5 shrink-0 ${config.color}`} />
-                <span className="flex-1 text-left font-medium">
-                  {t(`sidebar.typeLabels.${type}`, { defaultValue: config.label })}
+                <Folder className="h-3.5 w-3.5 shrink-0 text-sky-600" />
+                <span className="flex-1 truncate text-left font-medium">
+                  {categoryLabel}
                 </span>
                 <span className="text-xs text-muted-foreground">{items.length}</span>
               </button>
 
-              {isExpanded && (
+              {categoryExpanded && (
                 <div className="ml-3">
-                  {items.map((page) => {
-                    const isSelected = selectedFile === page.path
-                    const isArmed = armedPath === page.path
-                    const isDeleting = deletingPath === page.path
+                  {typeGroupEntries(items).map(([type, typeItems]) => {
+                    const config = typeConfig(type)
+                    const Icon = config.icon
+                    const isExpanded = expandedTypes.has(type)
+
                     return (
-                      <div
-                        key={page.path}
-                        className={`group flex items-center gap-1 rounded-md ${
-                          isSelected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
-                        }`}
-                      >
+                      <div key={type} className="mb-1">
                         <button
-                          onClick={() => openPathInPreview(page.path)}
-                          className={`flex flex-1 items-center gap-1.5 px-2 py-1 text-left text-sm min-w-0 ${
-                            isSelected
-                              ? "text-accent-foreground"
-                              : "text-muted-foreground group-hover:text-accent-foreground"
-                          }`}
-                          title={page.path}
+                          onClick={() => toggleType(type)}
+                          className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-sm hover:bg-accent/50"
                         >
-                          {page.origin === "web-clip" && <Globe className="h-3 w-3 shrink-0 text-blue-400" />}
-                          <span className="truncate">{page.title}</span>
+                          {isExpanded ? (
+                            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          )}
+                          <Icon className={`h-3.5 w-3.5 shrink-0 ${config.color}`} />
+                          <span className="flex-1 text-left font-medium">
+                            {t(`sidebar.typeLabels.${type}`, { defaultValue: config.label })}
+                          </span>
+                          <span className="text-xs text-muted-foreground">{typeItems.length}</span>
                         </button>
-                        <DeleteButton
-                          armed={isArmed}
-                          deleting={isDeleting}
-                          // Visible on hover, when this row is armed,
-                          // or while deleting. Other rows fade out so
-                          // accidental clicks on a sibling don't pile up.
-                          className={`mr-1 transition-opacity ${
-                            isArmed || isDeleting
-                              ? "opacity-100"
-                              : "opacity-0 group-hover:opacity-100"
-                          }`}
-                          onClick={() => void handleDeleteClick(page.path)}
-                          name={page.title}
-                        />
+
+                        {isExpanded && (
+                          <div className="ml-3">
+                            {typeItems.map((page) => {
+                              const isSelected = selectedFile === page.path
+                              const isArmed = armedPath === page.path
+                              const isDeleting = deletingPath === page.path
+                              return (
+                                <div
+                                  key={page.path}
+                                  className={`group flex items-center gap-1 rounded-md ${
+                                    isSelected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
+                                  }`}
+                                >
+                                  <button
+                                    onClick={() => openPathInPreview(page.path)}
+                                    className={`flex flex-1 items-center gap-1.5 px-2 py-1 text-left text-sm min-w-0 ${
+                                      isSelected
+                                        ? "text-accent-foreground"
+                                        : "text-muted-foreground group-hover:text-accent-foreground"
+                                    }`}
+                                    title={page.path}
+                                  >
+                                    {page.origin === "web-clip" && <Globe className="h-3 w-3 shrink-0 text-blue-400" />}
+                                    <span className="truncate">{page.title}</span>
+                                  </button>
+                                  <DeleteButton
+                                    armed={isArmed}
+                                    deleting={isDeleting}
+                                    // Visible on hover, when this row is armed,
+                                    // or while deleting. Other rows fade out so
+                                    // accidental clicks on a sibling don't pile up.
+                                    className={`mr-1 transition-opacity ${
+                                      isArmed || isDeleting
+                                        ? "opacity-100"
+                                        : "opacity-0 group-hover:opacity-100"
+                                    }`}
+                                    onClick={() => void handleDeleteClick(page.path)}
+                                    name={page.title}
+                                  />
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
                     )
                   })}

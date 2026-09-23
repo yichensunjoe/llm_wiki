@@ -26,6 +26,34 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.6.13",
+    date: "2026-09-23",
+    highlights: {
+      en: [
+        "Knowledge tree sidebar now groups pages by top-level category folders (e.g. 01-文献, 02-会议纪要), with the existing per-type grouping kept inside each category.",
+        "Root-level overview pages are grouped under a dedicated Overview section that always sorts first.",
+      ],
+      zh: [
+        "知识树侧栏改为按顶层分类目录分组（如 01-文献、02-会议纪要），每个分类内保留原有的按类型分组。",
+        "根目录下的概览类页面归入独立的「总览」分组，始终排在最前。",
+      ],
+    },
+  },
+  {
+    version: "0.6.12",
+    date: "2026-09-23",
+    highlights: {
+      en: [
+        "Fixed wiki page moves being misdetected as deletions on startup, which could strip wikilinks and truncate related-page lists across the library.",
+        "Fixed macOS release builds on forks without Apple signing secrets by only injecting signing environment variables when the secrets actually exist.",
+      ],
+      zh: [
+        "修复启动清理时把页面移动误判为删除的问题，该问题曾导致全库双链被剥离、相关页面列表被截断。",
+        "修复无 Apple 签名 secrets 的 fork 上 macOS 发布构建失败的问题：仅当签名 secrets 真实存在时才注入签名环境变量。",
+      ],
+    },
+  },
+  {
     version: "0.6.11",
     date: "2026-08-25",
     highlights: {
