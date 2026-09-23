@@ -1,5 +1,51 @@
 # LLM Wiki
 
+> **Reasonix 项目说明（P083-llm-wiki-upstream）**：本目录是上游 `github.com/nashsu/llm_wiki` 的 pristine 克隆（v0.6.11），下方为上游原始 README。项目用途与约束见 `AGENTS.md`、`HANDOFF.md`、`docs/requirements.md`。
+
+## Purpose（用途）
+
+作为 LLM Wiki 客户端（安装版 `/Applications/LLM Wiki.app`，v0.6.11）的**源码真本**：诊断安装版在知识库目录迁移后批量剥离 `[[双链]]` 的例程，评估侧栏「按文件夹分组」功能开发。用户自有 0.6.0 分叉见 P026，本项目不动它。
+
+## Status（状态）
+
+上游 v0.6.11 已克隆，治理文件已建立（2026-09-23）；尚未安装依赖、未构建。
+
+## Stack（技术栈）
+
+TypeScript + React + Vite 前端，Tauri（Rust）桌面壳（`src-tauri/`），Vitest 测试。构建/运行需 Node 与 Rust 工具链；仅源码阅读无需安装依赖。
+
+## Quick Start（快速开始）
+
+```bash
+npm ci            # 安装依赖（需 Node）
+npm run dev       # Vite 开发前端
+npm run tauri dev # Tauri 桌面开发模式（需 Rust）
+```
+
+## Commands（常用命令）
+
+```bash
+npm run test      # Vitest 单元测试
+npm run build     # 前端构建
+npm run tauri build  # 打包桌面应用
+```
+
+## Structure（目录结构）
+
+`src/` 前端源码（`lib/` 业务逻辑、`components/` UI、`stores/` 状态）；`src-tauri/` Rust 命令层；`mcp-server/` MCP 服务；`plans/`、`docs/` 设计文档。上游完整说明见下方 README 与 `llm-wiki.md`。
+
+## Configuration（配置）
+
+无环境变量即可阅读/诊断；应用运行配置由 Tauri 侧与用户项目内 `.llm-wiki/` 目录承载。参见 `.env.example`（如后续需要）。
+
+## Notes（已知限制）
+
+- `main` 跟踪 `origin/main`；本地修改开独立分支，禁止直推上游。
+- 上游 `.gitignore` 忽略 `AGENTS.md` 与 `docs/`，本项目以 `-f` 强制跟踪治理文件。
+- 版本与备份：独立本地 Git，上游即远端；治理提交见 `cccacd9`。
+
+---
+
 <p align="center">
   <img src="logo.jpg" width="128" height="128" style="border-radius: 22%;" alt="LLM Wiki Logo">
 </p>
